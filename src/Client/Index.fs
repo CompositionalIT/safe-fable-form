@@ -1,15 +1,19 @@
 module Index
 
 open Elmish
+open Fable.Form.Simple
+open Fable.Form.Simple.Bulma
 open Fable.Remoting.Client
 open Shared
 
-type Model = { Todos: Todo list; Input: string }
+type Values = { Todo: string }
+type Form = Form.View.Model<Values>
+type Model = { Todos: Todo list; Form: Form }
 
 type Msg =
     | GotTodos of Todo list
-    | SetInput of string
-    | AddTodo
+    | FormChanged of Form
+    | AddTodo of string
     | AddedTodo of Todo
 
 let todosApi =
@@ -18,7 +22,7 @@ let todosApi =
     |> Remoting.buildProxy<ITodosApi>
 
 let init () : Model * Cmd<Msg> =
-    let model = { Todos = []; Input = "" }
+    let model = { Todos = []; Form = Form.View.idle { Todo = "" } }
 
     let cmd = Cmd.OfAsync.perform todosApi.getTodos () GotTodos
 
@@ -27,14 +31,19 @@ let init () : Model * Cmd<Msg> =
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | GotTodos todos -> { model with Todos = todos }, Cmd.none
-    | SetInput value -> { model with Input = value }, Cmd.none
-    | AddTodo ->
-        let todo = Todo.create model.Input
-
-        let cmd = Cmd.OfAsync.perform todosApi.addTodo todo AddedTodo
-
-        { model with Input = "" }, cmd
-    | AddedTodo todo -> { model with Todos = model.Todos @ [ todo ] }, Cmd.none
+    | FormChanged form -> { model with Form = form }, Cmd.none
+    | AddTodo todo ->
+        let todo = Todo.create todo
+        model, Cmd.OfAsync.perform todosApi.addTodo todo AddedTodo
+    | AddedTodo todo ->
+        let newModel =
+            { model with
+                  Todos = model.Todos @ [ todo ]
+                  Form =
+                      { model.Form with
+                            State = Form.View.Success "Todo added"
+                            Values = { model.Form.Values with Todo = "" } } }
+        newModel, Cmd.none
 
 open Feliz
 open Feliz.Bulma
@@ -53,6 +62,25 @@ let navBrand =
         ]
     ]
 
+let form : Form.Form<Values, Msg, _> =
+    let todoField =
+        Form.textField
+            {
+                Parser = Ok
+                Value = fun values -> values.Todo
+                Update = fun newValue values -> { values with Todo = newValue }
+                Error = fun _ -> None
+                Attributes =
+                    {
+                        Label = "New todo"
+                        Placeholder = "What needs to be done?"
+                        HtmlAttributes = []
+                    }
+            }
+
+    Form.succeed AddTodo
+    |> Form.append todoField
+
 let containerBox (model: Model) (dispatch: Msg -> unit) =
     Bulma.box [
         Bulma.content [
@@ -61,29 +89,15 @@ let containerBox (model: Model) (dispatch: Msg -> unit) =
                     Html.li [ prop.text todo.Description ]
             ]
         ]
-        Bulma.field.div [
-            field.isGrouped
-            prop.children [
-                Bulma.control.p [
-                    control.isExpanded
-                    prop.children [
-                        Bulma.input.text [
-                            prop.value model.Input
-                            prop.placeholder "What needs to be done?"
-                            prop.onChange (fun x -> SetInput x |> dispatch)
-                        ]
-                    ]
-                ]
-                Bulma.control.p [
-                    Bulma.button.a [
-                        color.isPrimary
-                        prop.disabled (Todo.isValid model.Input |> not)
-                        prop.onClick (fun _ -> dispatch AddTodo)
-                        prop.text "Add"
-                    ]
-                ]
-            ]
-        ]
+        Form.View.asHtml
+            {
+                Dispatch = dispatch
+                OnChange = FormChanged
+                Action = Form.View.Action.SubmitOnly "Add"
+                Validation = Form.View.Validation.ValidateOnSubmit
+            }
+            form
+            model.Form
     ]
 
 let view (model: Model) (dispatch: Msg -> unit) =
