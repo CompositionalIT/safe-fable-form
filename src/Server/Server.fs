@@ -17,11 +17,11 @@ module Storage =
             Error "Invalid todo"
 
     do
-        addTodo (Todo.create "Create new SAFE project")
+        addTodo (Todo.create false "Create new SAFE project")
         |> ignore
 
-        addTodo (Todo.create "Write your app") |> ignore
-        addTodo (Todo.create "Ship it !!!") |> ignore
+        addTodo (Todo.create false "Write your app") |> ignore
+        addTodo (Todo.create false "Ship it !!!") |> ignore
 
 let todosApi =
     { getTodos = fun () -> async { return Storage.todos |> List.ofSeq }

@@ -2,14 +2,15 @@ namespace Shared
 
 open System
 
-type Todo = { Id: Guid; Description: string }
+type Todo = { Id: Guid; HighPriority: bool; Description: string }
 
 module Todo =
     let isValid (description: string) =
         String.IsNullOrWhiteSpace description |> not
 
-    let create (description: string) =
+    let create highPriority (description: string) =
         { Id = Guid.NewGuid()
+          HighPriority = highPriority
           Description = description }
 
 module Route =

@@ -6,14 +6,14 @@ open Fable.Form.Simple.Bulma
 open Fable.Remoting.Client
 open Shared
 
-type Values = { Todo: string }
+type Values = { Todo: string; HighPriority: bool }
 type Form = Form.View.Model<Values>
 type Model = { Todos: Todo list; Form: Form }
 
 type Msg =
     | GotTodos of Todo list
     | FormChanged of Form
-    | AddTodo of string
+    | AddTodo of string * bool
     | AddedTodo of Todo
 
 let todosApi =
@@ -22,7 +22,7 @@ let todosApi =
     |> Remoting.buildProxy<ITodosApi>
 
 let init () : Model * Cmd<Msg> =
-    let model = { Todos = []; Form = Form.View.idle { Todo = "" } }
+    let model = { Todos = []; Form = Form.View.idle { Todo = ""; HighPriority = false } }
 
     let cmd = Cmd.OfAsync.perform todosApi.getTodos () GotTodos
 
@@ -32,8 +32,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | GotTodos todos -> { model with Todos = todos }, Cmd.none
     | FormChanged form -> { model with Form = form }, Cmd.none
-    | AddTodo todo ->
-        let todo = Todo.create todo
+    | AddTodo (todo, highPriority) ->
+        let todo = Todo.create highPriority todo
         model, Cmd.OfAsync.perform todosApi.addTodo todo AddedTodo
     | AddedTodo todo ->
         let newModel =
@@ -78,15 +78,26 @@ let form : Form.Form<Values, Msg, _> =
                     }
             }
 
-    Form.succeed AddTodo
+    let highPriorityField =
+        Form.checkboxField
+            {
+                Parser = Ok
+                Value = fun values -> values.HighPriority
+                Update = fun newValue values -> { values with HighPriority = newValue }
+                Error = fun _ -> None
+                Attributes = { Text = " High priority" }
+            }
+
+    Form.succeed (fun todo highPriority -> AddTodo (todo, highPriority))
     |> Form.append todoField
+    |> Form.append highPriorityField
 
 let containerBox (model: Model) (dispatch: Msg -> unit) =
     Bulma.box [
         Bulma.content [
             Html.ol [
-                for todo in model.Todos do
-                    Html.li [ prop.text todo.Description ]
+                for todo in model.Todos |> List.sortBy (fun todo -> if todo.HighPriority then 1 else 2) do
+                    Html.li [ prop.text $"""{if todo.HighPriority then "IMPORTANT: " else ""}%s{todo.Description}""" ]
             ]
         ]
         Form.View.asHtml
